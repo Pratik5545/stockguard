@@ -21,6 +21,8 @@ import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.security.oauth2.server.resource.authentication.*;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
+import com.example.stockguard.infrastructure.ratelimit.RateLimitFilter;
 
 @Configuration
 public class SecurityConfig {
@@ -72,7 +74,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, RateLimitFilter rateLimitFilter) throws Exception {
         var roles = new JwtGrantedAuthoritiesConverter();
         roles.setAuthoritiesClaimName("role");
         roles.setAuthorityPrefix("ROLE_");
@@ -102,6 +104,7 @@ public class SecurityConfig {
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(authentication))
                         .authenticationEntryPoint((request, response, exception) -> problem(response, 401))
                         .accessDeniedHandler((request, response, exception) -> problem(response, 403)));
+        http.addFilterAfter(rateLimitFilter, AuthorizationFilter.class);
         return http.build();
     }
 

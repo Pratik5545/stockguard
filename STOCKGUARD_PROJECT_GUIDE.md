@@ -45,7 +45,7 @@ The project should be understandable and defensible in an interview. Every major
 The first version is **not**:
 
 - A microservices system.
-- A full e-commerce website with a frontend.
+- A frontend during the backend phase. The user plans frontend work after backend verification and delivery.
 - A real payment-processing platform.
 - A distributed system using Kafka, Kubernetes, or dozens of services.
 - A project where Redis replaces PostgreSQL as the source of truth.
@@ -129,7 +129,7 @@ Reservations represent a temporary checkout hold, not adding a product to a shop
 
 Before implementing reservation creation, select and document a short configurable hold duration, a maximum quantity per product per reservation, and a maximum number of PENDING reservations per user. Include overdue PENDING records in that count until their stock has actually been released. Enforce quantity and pending-count limits transactionally; concurrent requests from one user must not bypass the cap. An idempotent replay must not consume another slot. Do not extend a hold merely because the client retries or reads it.
 
-Add selected-endpoint rate limits in the Redis phase. Test repeated reserve/cancel attempts, simultaneous requests near the per-user cap, oversized requests, and attempts to renew an existing hold. Implemented defaults (2026-11-20): 5-minute holds, maximum quantity 2, maximum 3 PENDING reservations per customer; all are configurable. Overdue PENDING holds count until expiry commits. Redis rate limiting remains deferred.
+Selected-endpoint Redis limits are implemented and tested. Defaults (2026-11-20): 5-minute holds, maximum quantity 2, maximum 3 PENDING reservations per customer; all are configurable. Overdue PENDING holds count until expiry commits. With Redis enabled, auth requests share 20 attempts per socket IP per 60 seconds and reservation creation allows 10 per customer per 60 seconds. Confirm/cancel remain available when these quotas are exhausted. See docs/redis.md.
 
 Stock correctness and fair allocation are separate guarantees. The initial allocation policy accepts eligible requests as database contention permits; it does not promise FIFO ordering or equal purchase chances. Per-account limits and short expiry reduce abuse but cannot prevent one person using multiple accounts or coordinated customers holding all stock. Record this limitation in the README. Verified identity, bot detection, waiting rooms, and lotteries are possible later product features, not initial guarantees.
 
@@ -921,7 +921,7 @@ Do not skip ahead because you can generate code quickly. My learning is as impor
 
 ## 15. Initial progress tracker
 
-This tracker records functional implementation and verification. The user created and pushed the GitHub repository. Docker Compose and Testcontainers are verified; Redis and deployment remain pending. See PROJECT_STATE.md for delivery status.
+This tracker records functional implementation and verification. The user created and initially pushed the GitHub repository. Docker Compose, Testcontainers and Redis are verified locally; updated remote CI and deployment remain pending. Frontend comes after backend/testing/delivery. See PROJECT_STATE.md.
 
 - [ ] Phase 0 — Domain understanding and repository setup
 - [ ] Phase 1 — Database and ER design
@@ -932,12 +932,12 @@ This tracker records functional implementation and verification. The user create
 - [x] Phase 6 — Confirmation, cancellation, and orders
 - [x] Phase 7 — Idempotency
 - [x] Phase 8 — Reservation expiry
-- [ ] Phase 9 — Redis caching and rate limiting
+- [x] Phase 9 — Redis caching and rate limiting
 - [ ] Phase 10 — Quality, documentation, CI, and delivery
 
-**Project status:** Core backend and Docker setup verified: 43 tests on Testcontainers PostgreSQL 18, container API smoke checks and data persistence across Compose recreation. GitHub repository created and initially pushed by the user.  
-**Current phase:** Docker Compose and Testcontainers complete locally. Testcontainers uses Spring Boot's managed version; database tests default to disposable PostgreSQL instead of skipping without TEST_DB_URL. CI uses the same path; updated remote run remains unverified.  
-**Next action:** User commits/pushes Docker changes and checks CI; then implement Redis caching/rate limiting. The user runs all Git commands.
+**Project status:** Backend/Docker/Redis verified: 53 tests on Testcontainers PostgreSQL 18 and Redis 8.2, packaged API/cache smoke checks and earlier data-persistence/restart checks. GitHub repository created and initially pushed by the user.  
+**Current phase:** Redis phase complete locally. Product metadata uses a versioned 60-second cache with fresh DB availability and after-commit fills. Shared atomic request limits return 429; Redis outage falls back for catalog and returns 503 for protected POSTs. CI uses disposable PostgreSQL/Redis; remote run remains unverified.  
+**Next action:** User commits/pushes Redis changes and checks CI; finish deployment work next. Frontend is the final phase after backend/testing/delivery. The user runs all Git commands.
 
 ---
 

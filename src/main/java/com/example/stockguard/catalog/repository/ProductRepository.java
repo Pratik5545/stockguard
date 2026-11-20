@@ -1,5 +1,7 @@
 package com.example.stockguard.catalog.repository;
 import com.example.stockguard.catalog.dto.ProductResponse;
+import com.example.stockguard.catalog.dto.ProductMetadata;
+import com.example.stockguard.catalog.dto.ProductReadState;
 import com.example.stockguard.catalog.entity.Product;
 import java.util.Optional;
 import java.util.UUID;
@@ -11,6 +13,21 @@ import org.springframework.data.jpa.repository.Lock;
 import jakarta.persistence.LockModeType;
 
 public interface ProductRepository extends JpaRepository<Product, UUID> {
+    @Query("""
+            select new com.example.stockguard.catalog.dto.ProductReadState(
+                p.catalogVersion, i.onHandQuantity - i.reservedQuantity)
+            from Product p join Inventory i on i.productId = p.id
+            where p.active = true and p.id = :id
+            """)
+    Optional<ProductReadState> findActiveReadState(UUID id);
+
+    @Query("""
+            select new com.example.stockguard.catalog.dto.ProductMetadata(
+                p.id, p.sku, p.name, p.description, p.price, p.catalogVersion)
+            from Product p where p.active = true and p.id = :id
+            """)
+    Optional<ProductMetadata> findActiveMetadata(UUID id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Product p where p.id = :id")
     Optional<Product> findForUpdate(UUID id);

@@ -1,6 +1,18 @@
 name: stockguard
 
 services:
+  redis:
+    image: redis:8.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   postgres:
     image: postgres:18
     environment:
@@ -25,10 +37,15 @@ services:
       DB_PASSWORD: ${DOCKER_DB_PASSWORD:?Run scripts/Initialize-Docker.ps1 first}
       JWT_SECRET: ${DOCKER_JWT_SECRET:?Run scripts/Initialize-Docker.ps1 first}
       SERVER_PORT: "8080"
+      REDIS_ENABLED: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     ports:
       - "127.0.0.1:${APP_PORT:-8081}:8080"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health"]

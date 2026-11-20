@@ -4,13 +4,15 @@
 
 - `Dockerfile`: builds the application with the Maven Wrapper and JDK 25, then copies only the packaged JAR to a JRE 25 runtime running as a non-root user. The image build skips tests; run `verify` separately before delivery.
 - `.dockerignore`: allows only build inputs into the Docker build context. Local secrets, Git history, dependency caches and test files are excluded.
-- `compose.yaml`: starts the app and PostgreSQL 18 on a private Compose network. PostgreSQL must become healthy before the app starts. Only the API is exposed, on loopback port 8081 by default.
+- `compose.yaml`: starts the app, PostgreSQL 18 and Redis 8.2 on a private Compose network. PostgreSQL and Redis must become healthy before the app starts. The API binds to loopback port 8081 by default; Redis binds to loopback 6380 for local-profile development. PostgreSQL has no host port.
 - `scripts/Initialize-Docker.ps1`: generates local database and JWT secrets in ignored `.env.docker`; rerunning it preserves existing credentials.
 - `TestDatabase.java`: uses `TEST_DB_*` when provided, otherwise starts one temporary PostgreSQL 18 Testcontainers instance per test JVM. Each database test suite keeps its own random schema.
 
 The container runtime and Maven test JVM use UTC. This keeps timestamps consistent across machines and avoids sending obsolete host timezone aliases such as `Asia/Calcutta` to PostgreSQL builds that do not include those aliases. User-facing timezone conversion remains a client concern.
 
 An image is the application template. A container is a running instance of that image. A named volume stores database files independently of the container.
+
+Redis features are enabled automatically in Compose. Its contents are disposable and reset on restart; PostgreSQL data remains in the named volume. See [Redis behavior and request limits](redis.md).
 
 ## Start locally from PowerShell
 
@@ -65,4 +67,4 @@ Maven uses `JAVA_HOME`, which may differ from `java` on PATH. If Maven reports `
 $env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-25.0.5.8-hotspot'
 ```
 
-For an externally managed dedicated test database, set `TEST_DB_URL`, `TEST_DB_USERNAME` and `TEST_DB_PASSWORD`. The role needs schema-creation permission; suites remove only their randomly generated schemas. GitHub Actions now uses the same Testcontainers path on its Ubuntu runner.
+For an externally managed dedicated test database, set `TEST_DB_URL`, `TEST_DB_USERNAME` and `TEST_DB_PASSWORD`. The role needs schema-creation permission; suites remove only their randomly generated schemas. Redis integration tests still require Docker and start a separate disposable Redis container. GitHub Actions uses the same Testcontainers path on its Ubuntu runner.

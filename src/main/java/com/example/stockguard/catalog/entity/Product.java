@@ -15,6 +15,8 @@ public class Product {
     private boolean active;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
     @Column(name = "updated_at", nullable = false) private Instant updatedAt;
+    @Version
+    @Column(name = "catalog_version", nullable = false) private long catalogVersion;
     protected Product() {}
     public Product(UUID id, String sku, String name, String description, BigDecimal price) {
         this.id = id;

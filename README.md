@@ -12,7 +12,7 @@ This machine uses ignored `config/application-local.properties` for database cre
 
 - Swagger UI: http://localhost:8080/swagger-ui/index.html
 - Health: http://localhost:8080/actuator/health
-- Stop with Ctrl+C. Restart after code changes; Flyway applies V1-V3 automatically.
+- Stop with Ctrl+C. Restart after code changes; Flyway applies V1-V4 automatically.
 - Other machines: configure JDK 25, DB_URL, DB_USERNAME, DB_PASSWORD and JWT_SECRET. `.env.example` is reference only, not automatically loaded. Never edit applied migrations.
 - [Login and first-admin setup](docs/authentication.md) | [Complete workflow walkthrough](docs/workflow.md) | [Architecture and file map](docs/architecture.md)
 
@@ -25,7 +25,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Initialize-Docker.ps
 docker compose --env-file .env.docker up --build --detach --wait
 ```
 
-Swagger: http://localhost:8081/swagger-ui/index.html. Compose uses a separate PostgreSQL database and preserves its data in a named volume. Stop with `docker compose --env-file .env.docker down`. [Docker setup and concepts](docs/docker.md).
+Swagger: http://localhost:8081/swagger-ui/index.html. Compose starts the app, PostgreSQL and Redis. Its separate PostgreSQL database persists in a named volume. Stop with `docker compose --env-file .env.docker down`. [Docker setup](docs/docker.md) | [Redis behavior](docs/redis.md).
 
 Verified: container health/Swagger, authentication, reservation-to-order flow and database persistence after Compose container recreation.
 
@@ -39,6 +39,7 @@ Verified: container health/Swagger, authentication, reservation-to-order flow an
 | Orders | Immutable price/name snapshots, owner/admin detail access, own history |
 | Retry safety | Durable idempotency for reservation create/confirm/cancel |
 | Expiry | Scheduled worker, safe concurrent claims, restart catch-up |
+| Redis | Versioned product metadata cache with fresh DB stock; shared auth/reservation request limits |
 
 Defaults: 5-minute holds, max 2 units per reservation, max 3 pending per customer, expiry worker every 5 seconds in batches of up to 100. Stock remains held until expiry commits. Only CUSTOMER tokens can create reservations; ADMIN may read but cannot confirm/cancel someone else's hold.
 
@@ -48,16 +49,16 @@ Defaults: 5-minute holds, max 2 units per reservation, max 3 pending per custome
 .\mvnw.cmd '-Dmaven.repo.local=.m2/repository' verify
 ```
 
-Docker must be running: without TEST_DB_URL, Testcontainers automatically starts disposable PostgreSQL 18. Alternatively, set TEST_DB_URL, TEST_DB_USERNAME and TEST_DB_PASSWORD for a dedicated database/role with schema creation permission. Tests use isolated random schemas; unavailable Docker fails tests instead of skipping them.
+Docker must be running: Testcontainers starts disposable PostgreSQL 18 and Redis 8.2. TEST_DB_URL, TEST_DB_USERNAME and TEST_DB_PASSWORD optionally select a dedicated PostgreSQL database/role with schema creation permission; Redis tests still require Docker. Database schemas are isolated; unavailable Docker fails tests instead of skipping them.
 
-Verified on Testcontainers PostgreSQL 18/Java 25: **43 tests, zero failures/errors/skips**. Includes 100 concurrent customers competing for 1 and 7 units, duplicate requests, ownership, user caps, lifecycle races, rollback and deadline checks. Packaged app restart was also verified previously: scheduled expiry released stock and persisted idempotency replay created no new hold. Updated GitHub CI still needs remote verification.
+Verified on Testcontainers PostgreSQL 18/Redis 8.2/Java 25: **53 tests, zero failures/errors/skips**. Includes 100-customer stock races, ownership/retries/caps/lifecycle rollback, cache hits/live stock/version invalidation and atomic limits/outage recovery. Packaged API checks also passed. Earlier restart testing verified expiry catch-up and durable replay. Updated GitHub CI still needs remote verification.
 
 ## Boundaries / remaining work
 
-- Redis and deployment remain pending. Docker Compose and Testcontainers are implemented; GitHub repository: [Pratik5545/stockguard](https://github.com/Pratik5545/stockguard). Updated CI still needs remote verification.
+- Deployment and updated remote CI verification remain pending. Frontend is planned after backend/testing/delivery work. GitHub repository: [Pratik5545/stockguard](https://github.com/Pratik5545/stockguard).
 - One product per reservation; no cart, direct-order shortcut or payment integration.
 - No FIFO/fair-allocation guarantee; account limits cannot stop multiple accounts/coordinated customers.
 - Idempotency successes are retained indefinitely; product/stock writes are not idempotent. No inventory movement ledger yet.
-- Token refresh/revocation, email verification and rate limiting are not implemented.
+- Token refresh/revocation and email verification are not implemented. Redis is optional in the original local profile and enabled in Compose. When enabled: auth quota 20/IP/minute, reservation-create quota 10/customer/minute; Redis failure gives catalog fallback and 503 for protected writes.
 
 [Project guide](STOCKGUARD_PROJECT_GUIDE.md) and [current state](PROJECT_STATE.md) remain at root. `.m2` and `target` are ignored generated files.

@@ -47,7 +47,7 @@ Override these through Spring configuration/environment. Single product per rese
 
 At now >= expiresAt, confirmation AND cancellation reject the action. Stock remains held until the worker commits EXPIRED. Scheduling delay is not a release-time guarantee: contention, backlog and downtime can extend it. A restart catches up from durable PENDING records. Workers use SKIP LOCKED and process one reservation per transaction, up to the batch limit.
 
-The allocation policy does not promise FIFO or equal purchase chances. Per-account limits do not stop multiple accounts or coordinated customers. Redis rate limiting remains deferred.
+The allocation policy does not promise FIFO or equal purchase chances. Per-account limits do not stop multiple accounts or coordinated customers. With Redis enabled, reservation creation allows 10 attempts per customer per 60-second window; HTTP protection can return 429/503 before an idempotency replay. See [Redis policies](redis.md).
 
 ## Idempotency
 
@@ -77,4 +77,4 @@ TEST_DB_* enables the complete PostgreSQL suite. Workflow tests use signed test 
 
 Swagger is served locally from the packaged dependency. CI configuration is in .github/workflows/verify.yml and uses PostgreSQL 18 on the GitHub runner; it is not a local Docker setup. The workflow has not been run on GitHub yet.
 
-Verified on 2026-11-20: 43 tests passed with zero failures/errors/skips. The 100-customer scenarios produced exactly 1/7 accepted reservations for stock 1/7. A separate packaged-process restart test expired a persisted hold and replayed its idempotency record without reserving again. Observed expiry delay was about 14.17 seconds during deliberate downtime/restart with a 2-second test hold and 500ms polling interval; this is not a guaranteed release bound.
+Verified on 2026-11-20: 53 tests passed with zero failures/errors/skips, including 10 Redis cache/rate-limit/outage tests. The 100-customer scenarios produced exactly 1/7 accepted reservations for stock 1/7. A separate packaged-process restart test expired a persisted hold and replayed its idempotency record without reserving again. Observed expiry delay was about 14.17 seconds during deliberate downtime/restart with a 2-second test hold and 500ms polling interval; this is not a guaranteed release bound.

@@ -1,0 +1,42 @@
+name: stockguard
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: stockguard
+      POSTGRES_USER: stockguard
+      POSTGRES_PASSWORD: ${DOCKER_DB_PASSWORD:?Run scripts/Initialize-Docker.ps1 first}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stockguard -d stockguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  app:
+    build: .
+    image: stockguard:local
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/stockguard
+      DB_USERNAME: stockguard
+      DB_PASSWORD: ${DOCKER_DB_PASSWORD:?Run scripts/Initialize-Docker.ps1 first}
+      JWT_SECRET: ${DOCKER_JWT_SECRET:?Run scripts/Initialize-Docker.ps1 first}
+      SERVER_PORT: "8080"
+    ports:
+      - "127.0.0.1:${APP_PORT:-8081}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 5s
+      start_period: 40s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

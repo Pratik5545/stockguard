@@ -2,18 +2,15 @@ package com.example.stockguard;
 
 import java.net.URI;
 import java.net.http.*;
-import java.sql.DriverManager;
 import java.util.UUID;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@EnabledIfEnvironmentVariable(named = "TEST_DB_URL", matches = ".+")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class CatalogIntegrationTests {
     private static final String SCHEMA = "catalog_test_" + UUID.randomUUID().toString().replace("-", "");
@@ -32,9 +29,9 @@ class CatalogIntegrationTests {
         registry.add("stockguard.reservation.expiry-enabled", () -> "false");
         registry.add("spring.datasource.hikari.schema", () -> SCHEMA);
         registry.add("stockguard.jwt.secret", () -> "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
-        registry.add("spring.datasource.url", () -> System.getenv("TEST_DB_URL"));
-        registry.add("spring.datasource.username", () -> System.getenv("TEST_DB_USERNAME"));
-        registry.add("spring.datasource.password", () -> System.getenv().getOrDefault("TEST_DB_PASSWORD", ""));
+        registry.add("spring.datasource.url", () -> TestDatabase.url());
+        registry.add("spring.datasource.username", () -> TestDatabase.username());
+        registry.add("spring.datasource.password", () -> TestDatabase.password());
         registry.add("spring.flyway.schemas", () -> SCHEMA);
         registry.add("spring.jpa.properties.hibernate.default_schema", () -> SCHEMA);
     }
@@ -42,8 +39,7 @@ class CatalogIntegrationTests {
     @BeforeEach
     void seed() throws Exception {
         adminToken = null;
-        try (var connection = DriverManager.getConnection(System.getenv("TEST_DB_URL"),
-                System.getenv("TEST_DB_USERNAME"), System.getenv().getOrDefault("TEST_DB_PASSWORD", ""))) {
+        try (var connection = TestDatabase.connection()) {
             connection.setSchema(SCHEMA);
             try (var sql = connection.createStatement()) {
                 sql.executeUpdate("DELETE FROM users");
@@ -58,8 +54,7 @@ class CatalogIntegrationTests {
         }
         assertThat(write("POST", "/api/v1/auth/register",
                 "{\"email\":\"admin@example.test\",\"password\":\"" + PASSWORD + "\"}").statusCode()).isEqualTo(201);
-        try (var connection = DriverManager.getConnection(System.getenv("TEST_DB_URL"),
-                System.getenv("TEST_DB_USERNAME"), System.getenv().getOrDefault("TEST_DB_PASSWORD", ""));
+        try (var connection = TestDatabase.connection();
              var sql = connection.createStatement()) {
             connection.setSchema(SCHEMA);
             sql.executeUpdate("UPDATE users SET role='ADMIN' WHERE email='admin@example.test'");
@@ -72,8 +67,7 @@ class CatalogIntegrationTests {
 
     @AfterAll
     static void cleanup() throws Exception {
-        try (var connection = DriverManager.getConnection(System.getenv("TEST_DB_URL"),
-                System.getenv("TEST_DB_USERNAME"), System.getenv().getOrDefault("TEST_DB_PASSWORD", ""));
+        try (var connection = TestDatabase.connection();
              var sql = connection.createStatement()) {
             sql.execute("DROP SCHEMA " + SCHEMA + " CASCADE");
         }
@@ -130,8 +124,7 @@ class CatalogIntegrationTests {
         assertThat((String) JsonPath.read(registered.body(), "$.role")).isEqualTo("CUSTOMER");
         assertThat((String) JsonPath.read(registered.body(), "$.email")).isEqualTo("customer@example.test");
         assertThat(registered.body()).doesNotContain("password", PASSWORD);
-        try (var connection = DriverManager.getConnection(System.getenv("TEST_DB_URL"),
-                System.getenv("TEST_DB_USERNAME"), System.getenv().getOrDefault("TEST_DB_PASSWORD", ""));
+        try (var connection = TestDatabase.connection();
              var sql = connection.createStatement()) {
             connection.setSchema(SCHEMA);
             try (var rows = sql.executeQuery("SELECT password_hash FROM users WHERE email='customer@example.test'")) {
@@ -236,8 +229,7 @@ class CatalogIntegrationTests {
 
     @Test
     void inventoryFailureRollsBackProductCreation() throws Exception {
-        try (var connection = DriverManager.getConnection(System.getenv("TEST_DB_URL"),
-                System.getenv("TEST_DB_USERNAME"), System.getenv().getOrDefault("TEST_DB_PASSWORD", ""));
+        try (var connection = TestDatabase.connection();
              var sql = connection.createStatement()) {
             connection.setSchema(SCHEMA);
             sql.execute("ALTER TABLE inventory ADD CONSTRAINT test_reject_stock CHECK (on_hand_quantity <> 99)");
@@ -302,8 +294,7 @@ class CatalogIntegrationTests {
         var statuses = concurrentAdjustments(-1);
         assertThat(statuses.stream().filter(status -> status == 200).count()).isEqualTo(7);
         assertThat(statuses.stream().filter(status -> status == 409).count()).isEqualTo(13);
-        try (var connection = DriverManager.getConnection(System.getenv("TEST_DB_URL"),
-                System.getenv("TEST_DB_USERNAME"), System.getenv().getOrDefault("TEST_DB_PASSWORD", ""));
+        try (var connection = TestDatabase.connection();
              var sql = connection.createStatement()) {
             connection.setSchema(SCHEMA);
             try (var rows = sql.executeQuery("SELECT on_hand_quantity, reserved_quantity FROM inventory WHERE product_id='" + ACTIVE + "'")) {

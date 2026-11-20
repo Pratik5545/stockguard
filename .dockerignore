@@ -1,0 +1,12 @@
+# Allow only build inputs; local configuration and secrets never enter the context.
+**
+!Dockerfile
+!.dockerignore
+!pom.xml
+!mvnw
+!.mvn/
+!.mvn/**
+!src/
+!src/main/
+!src/main/**
+src/main/resources/application-local.*

@@ -15,7 +15,6 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.IntFunction;
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.*;
@@ -29,7 +28,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
 
-@EnabledIfEnvironmentVariable(named = "TEST_DB_URL", matches = ".+")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import(WorkflowIntegrationTests.TimeConfig.class)
 @Timeout(120)
@@ -55,9 +53,9 @@ class WorkflowIntegrationTests {
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("stockguard.jwt.secret", () -> "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
-        registry.add("spring.datasource.url", () -> System.getenv("TEST_DB_URL"));
-        registry.add("spring.datasource.username", () -> System.getenv("TEST_DB_USERNAME"));
-        registry.add("spring.datasource.password", () -> System.getenv().getOrDefault("TEST_DB_PASSWORD", ""));
+        registry.add("spring.datasource.url", () -> TestDatabase.url());
+        registry.add("spring.datasource.username", () -> TestDatabase.username());
+        registry.add("spring.datasource.password", () -> TestDatabase.password());
         registry.add("spring.datasource.hikari.schema", () -> SCHEMA);
         registry.add("spring.flyway.schemas", () -> SCHEMA);
         registry.add("spring.jpa.properties.hibernate.default_schema", () -> SCHEMA);
@@ -91,8 +89,7 @@ class WorkflowIntegrationTests {
     }
 
     private static Connection databaseConnection() throws SQLException {
-        var connection = DriverManager.getConnection(System.getenv("TEST_DB_URL"),
-                System.getenv("TEST_DB_USERNAME"), System.getenv().getOrDefault("TEST_DB_PASSWORD", ""));
+        var connection = TestDatabase.connection();
         connection.setSchema(SCHEMA);
         return connection;
     }

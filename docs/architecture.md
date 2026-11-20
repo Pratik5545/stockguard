@@ -79,7 +79,7 @@ SQL constraints enforce at most one item per header; services create the require
 
 ## Operational boundaries
 
-- PostgreSQL is required. Redis, Docker Compose and Testcontainers are deferred.
+- PostgreSQL is required. Docker Compose provides the app and a persistent local database; Testcontainers provides a disposable database for automated tests. Redis remains pending. See [Docker setup](docker.md).
 - Worker failures are logged and counted; the next scheduled pass retries durable work. Counters are internal Micrometer meters; only health is currently exposed by Actuator.
 - Inspect overdue backlog with: SELECT count(*), min(expires_at) FROM reservations WHERE status='PENDING' AND expires_at <= CURRENT_TIMESTAMP;
 - Time-based tests inject Clock; production uses synchronized UTC application clocks.

@@ -921,7 +921,7 @@ Do not skip ahead because you can generate code quickly. My learning is as impor
 
 ## 15. Initial progress tracker
 
-This tracker records functional implementation and verification. Git initialization/commit, Redis/Docker and deployment are still pending; see PROJECT_STATE.md for delivery status.
+This tracker records functional implementation and verification. The user created and pushed the GitHub repository. Docker Compose and Testcontainers are verified; Redis and deployment remain pending. See PROJECT_STATE.md for delivery status.
 
 - [ ] Phase 0 — Domain understanding and repository setup
 - [ ] Phase 1 — Database and ER design
@@ -935,9 +935,9 @@ This tracker records functional implementation and verification. Git initializat
 - [ ] Phase 9 — Redis caching and rate limiting
 - [ ] Phase 10 — Quality, documentation, CI, and delivery
 
-**Project status:** Core backend implemented and verified (43 tests plus packaged restart/expiry check). Redis, Docker and delivery remain pending; see PROJECT_STATE.md.  
-**Current phase:** Core functionality through Phase 8 implemented; Redis/Docker deferred by user. Swagger and CI configuration prepared.  
-**Next action:** Demonstrate the complete workflow in Swagger; then add Redis/Docker and finish delivery when requested.
+**Project status:** Core backend and Docker setup verified: 43 tests on Testcontainers PostgreSQL 18, container API smoke checks and data persistence across Compose recreation. GitHub repository created and initially pushed by the user.  
+**Current phase:** Docker Compose and Testcontainers complete locally. Testcontainers uses Spring Boot's managed version; database tests default to disposable PostgreSQL instead of skipping without TEST_DB_URL. CI uses the same path; updated remote run remains unverified.  
+**Next action:** User commits/pushes Docker changes and checks CI; then implement Redis caching/rate limiting. The user runs all Git commands.
 
 ---
 

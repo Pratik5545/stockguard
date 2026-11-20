@@ -9,14 +9,12 @@ import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@EnabledIfEnvironmentVariable(named = "TEST_DB_URL", matches = ".+")
 class DatabaseMigrationTests {
 
     private static final String SCHEMA = "stockguard_test_" + UUID.randomUUID().toString().replace("-", "");
@@ -25,9 +23,9 @@ class DatabaseMigrationTests {
 
     @BeforeAll
     static void migrateIsolatedSchema() throws SQLException {
-        String url = System.getenv("TEST_DB_URL");
-        String username = System.getenv("TEST_DB_USERNAME");
-        String password = System.getenv("TEST_DB_PASSWORD");
+        String url = TestDatabase.url();
+        String username = TestDatabase.username();
+        String password = TestDatabase.password();
         connection = DriverManager.getConnection(url, username, password);
         flyway = Flyway.configure().dataSource(url, username, password)
                 .schemas(SCHEMA).defaultSchema(SCHEMA)

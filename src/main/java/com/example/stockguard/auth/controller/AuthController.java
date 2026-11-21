@@ -2,6 +2,7 @@ package com.example.stockguard.auth.controller;
 
 import com.example.stockguard.auth.dto.*;
 import com.example.stockguard.auth.service.AuthService;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +16,7 @@ public class AuthController {
     public AuthController(AuthService auth) { this.auth = auth; }
 
     @PostMapping("/register")
+    @ApiResponse(responseCode = "201", description = "Customer registered")
     public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).body(auth.register(request));
     }

@@ -478,6 +478,9 @@ class WorkflowIntegrationTests {
         var spec = request("GET", "/v3/api-docs", null, null, null);
         assertThat(spec.statusCode()).isEqualTo(200);
         assertThat(spec.body()).contains("/api/v1/reservations", "/api/v1/me/orders", "bearerAuth", "Idempotency-Key");
+        assertThat((String) JsonPath.read(spec.body(), "$.servers[0].url")).isEqualTo("/");
+        assertThat((Map<?, ?>) JsonPath.read(spec.body(), "$.paths['/api/v1/auth/register'].post.responses"))
+                .containsKey("201");
         assertThat(request("GET", "/swagger-ui/index.html", null, null, null).statusCode()).isEqualTo(200);
     }
 

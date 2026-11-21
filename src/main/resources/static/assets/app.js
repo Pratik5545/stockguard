@@ -6,7 +6,7 @@ const state = { token: null, role: null, expires: 0, generation: 0, offset: 0,
 const api = createApi(() => state.token, () => logout('Your session ended. Please sign in again.'), date => { state.offset = date - Date.now(); });
 const operations = createOperations(api);
 const now = () => Date.now() + state.offset;
-const amount = value => Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const amount = value => Number(value).toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
 const dateText = value => new Date(value).toLocaleString();
 
 function element(tag, text, className) {
@@ -39,17 +39,24 @@ function logout(message = 'You have signed out.') {
   sessionUi(); location.hash = 'catalog'; route(); notice(message);
 }
 function route() {
+  if (location.hash === '#main') { $('#main').focus(); return; }
   let view = location.hash.slice(1) || 'catalog';
   if (!['catalog', 'reservations', 'orders', 'admin'].includes(view)) view = 'catalog';
   if ((['reservations', 'orders'].includes(view) && state.role !== 'CUSTOMER') || (view === 'admin' && state.role !== 'ADMIN')) {
     view = 'catalog'; notice('Sign in with the appropriate account to open that workspace.');
   }
   state.view = view;
+  const titles = { catalog: 'Product catalog', reservations: 'My holds', orders: 'Order history', admin: 'Manage inventory' };
+  const heading = $(`#${view} h1`);
+  heading.textContent = titles[view];
+  heading.tabIndex = -1;
+  document.title = `${titles[view]} | StockGuard`;
   document.querySelectorAll('.view').forEach(node => { node.hidden = node.id !== view; });
   document.querySelectorAll('nav a').forEach(node => {
     if (node.hash === `#${view}`) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current');
   });
   load(view);
+  heading.focus({ preventScroll: true });
 }
 function pagination(view, data) {
   const node = $(`#${view}-pages`); node.replaceChildren();
@@ -79,7 +86,7 @@ async function load(view = state.view, quiet = false) {
     }
     if (!data.items.length) empty(container, view === 'catalog' ? 'No products yet. Check back soon.' : view === 'reservations' ? 'No holds yet. Reserve a product from the catalog to get started.' : 'No orders yet. Confirm a hold to place your first order.');
     pagination(view, data);
-    if (view === 'catalog') $('#catalog-status').textContent = `${data.totalElements} products · Updated ${new Date().toLocaleTimeString()}`;
+    if (view === 'catalog') $('#catalog-status').textContent = `${data.totalElements} ${data.totalElements === 1 ? 'product' : 'products'} · Updated ${new Date().toLocaleTimeString()}`;
     tick();
   } catch (error) {
     if (generation !== state.generation) return;
@@ -92,7 +99,7 @@ async function load(view = state.view, quiet = false) {
 }
 function updateProduct(card, product) {
   card.querySelector('h3').textContent = product.name;
-  card.querySelector('.description').textContent = product.description || 'Ready for your next order.';
+  card.querySelector('.description').textContent = product.description || 'No description provided.';
   card.querySelector('.price').textContent = amount(product.price);
   const badge = card.querySelector('.badge'); badge.textContent = product.availableQuantity > 0 ? `${product.availableQuantity} available` : 'Out of stock';
   badge.className = `badge${product.availableQuantity > 0 ? '' : ' empty'}`;
@@ -102,7 +109,7 @@ function updateProduct(card, product) {
 function productCard(product) {
   const card = element('article', undefined, 'product'); card.dataset.id = product.id;
   const top = element('div', undefined, 'product-top'); top.append(element('span', product.sku, 'sku'), element('span', '', 'badge'));
-  card.append(top, element('h3'), element('p', '', 'description'), element('div', '', 'price'), element('p', 'Unit price · currency not specified', 'muted'));
+  card.append(top, element('h3'), element('p', '', 'description'), element('div', '', 'price'), element('p', 'Unit price · INR', 'muted'));
   if (state.role === 'CUSTOMER') {
     const form = element('form', undefined, 'reserve-form');
     const label = element('label', 'Quantity'); const input = element('input');
@@ -121,7 +128,7 @@ function recordCard(item, view) {
   const card = element('article', undefined, 'record');
   const top = element('div', undefined, 'record-top'); top.append(element('h3', item.productName), element('span', item.status, 'badge'));
   card.append(top, element('p', `${item.quantity} × ${amount(item.unitPrice)} · ${item.sku}`), element('p', `ID: ${item.id}`, 'muted'), element('p', `Created ${dateText(item.createdAt)}`, 'muted'));
-  if (view === 'orders') card.append(element('p', `Order total: ${amount(item.totalAmount)} (currency not specified)`));
+  if (view === 'orders') card.append(element('p', `Order total: ${amount(item.totalAmount)}`));
   else if (item.status === 'PENDING') {
     const timer = element('p', '', 'countdown'); timer.dataset.expires = item.expiresAt;
     const actions = element('div', undefined, 'actions');
@@ -131,6 +138,7 @@ function recordCard(item, view) {
   return card;
 }
 async function lifecycle(event, id, action) {
+  if (action === 'cancel' && !window.confirm('Cancel this hold and release its stock?')) return;
   const buttons = event.currentTarget.parentElement.querySelectorAll('button'); buttons.forEach(node => { node.disabled = true; });
   try { await mutate(`/reservations/${id}/${action}`); }
   finally { buttons.forEach(node => { node.disabled = false; }); tick(); }
@@ -185,6 +193,9 @@ async function adminSubmit(event, type) {
   event.preventDefault(); const form = event.currentTarget; const submit = form.querySelector('button');
   const generation = state.generation; submit.disabled = true;
   const fields = Object.fromEntries(new FormData(form));
+  if (type === 'stock' && Number(fields.delta) < 0 && !window.confirm(`Remove ${Math.abs(Number(fields.delta))} units from physical stock?`)) {
+    submit.disabled = false; return;
+  }
   const path = type === 'product' ? '/admin/products' : `/admin/products/${encodeURIComponent(fields.productId.trim())}/stock-adjustments`;
   const body = type === 'product' ? { ...fields, price: fields.price, initialStock: Number(fields.initialStock) } : { delta: Number(fields.delta) };
   try {
@@ -205,6 +216,34 @@ $('#auth-dialog').addEventListener('close', () => { $('#auth-form').elements.pas
 $('#auth-toggle').addEventListener('click', () => { state.register = !state.register; authMode(); });
 $('#logout').addEventListener('click', () => logout());
 $('#refresh').addEventListener('click', () => load('catalog'));
+let fieldNumber = 0;
+function validateField(field) {
+  const id = field.dataset.errorId ||= `field-error-${++fieldNumber}`;
+  let message = document.getElementById(id);
+  if (!message) {
+    message = element('span', '', 'field-error'); message.id = id;
+    field.insertAdjacentElement('afterend', message);
+    field.setAttribute('aria-describedby', id);
+  }
+  const invalid = !field.validity.valid;
+  message.textContent = invalid ? field.validationMessage : '';
+  field.setAttribute('aria-invalid', String(invalid));
+}
+document.addEventListener('invalid', event => {
+  if (event.target.matches('input, textarea')) validateField(event.target);
+}, true);
+document.addEventListener('focusout', event => {
+  if (event.target.matches('input, textarea')) validateField(event.target);
+});
+document.addEventListener('input', event => {
+  if (event.target.matches('[aria-invalid=true]')) validateField(event.target);
+});
+document.addEventListener('reset', event => {
+  event.target.querySelectorAll('.field-error').forEach(node => { node.textContent = ''; });
+  event.target.querySelectorAll('[aria-invalid]').forEach(node => node.removeAttribute('aria-invalid'));
+});
+window.addEventListener('offline', () => notice('You are offline. Displayed stock may be outdated. Reconnect before submitting changes.', true));
+window.addEventListener('online', () => { notice('Connection restored. Refreshing current records.'); load(state.view, true); });
 window.addEventListener('hashchange', route);
 window.addEventListener('pageshow', event => { if (event.persisted) logout('Sign in again to continue.'); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { tick(); load(state.view, true); } });

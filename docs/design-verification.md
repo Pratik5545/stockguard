@@ -18,8 +18,9 @@ The package also supports Claude Code, Antigravity, OpenCode, Cursor, Gemini CLI
 | Contrast | PASS measured pairs: muted text on white 6.13:1; primary white-on-green 8.02:1; deadline text 6.71:1; nav 10.83:1; available status 7.32:1; unavailable status 5.76:1; error text 6.45:1. Input boundary 3.64:1 meets non-text 3:1. Focus on white 3.48:1 meets non-text 3:1. This is not a full accessibility certification. |
 | Keyboard / forms | PASS for implemented focus, skip link, native controls, validation messages and Escape browser check. Complete manual keyboard/assistive-technology audit remains pending. |
 | Customer / admin actions | PASS against fixture endpoints: registration, login, reserve, confirm, cancel, history, expired-button disabling, create product and positive stock adjustment. API permissions remain enforced by the backend. |
-| Recovery / security | PASS: five Node tests cover token omission on public calls, no cookie credentials, 401/429 handling, exact uncertain retries, unique action keys, duplicate prevention and sign-out cleanup. Browser test exercises server error/retry recovery. |
-| Build / serving | PASS: two database-free Spring HTTP tests and JAR packaging; final static resource edits were repackaged successfully. |
-| Complete release gate | PENDING: real-backend browser walkthrough, remaining interaction cases and full PostgreSQL/Redis suite. Do not interpret the narrower PASS rows as a clean full skill delivery gate. |
+| Recovery / security | Nine Node tests passed, including a delayed 401, an incomplete receipt and a throttled replay. Fixture Chrome preserved a focused hold action and the selected catalog page during competing updates. |
+| Build / serving | Maven ran 57 tests with disposable PostgreSQL 18 and Redis 8.2, with zero failures, errors or skips. The updated JAR packaged successfully. |
+| Local end-to-end | Chrome exercised signup, login and admin stock against the JAR. A committed reservation with a lost response encountered a 429, then replayed and confirmed. PostgreSQL contained one reservation and one order. |
+| Complete release gate | Pending manual offline and expiry checks, assistive-technology review and verification on Render. |
 
 The skill's full delivery gate requires every interaction exercised. No clean full-gate claim is made while the listed checks remain pending. The user's instruction to continue autonomously permits delivering the local implementation with these verification limits; it does not permit fabricating evidence.

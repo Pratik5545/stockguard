@@ -6,6 +6,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -31,8 +32,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (settings.enabled() && "POST".equals(request.getMethod())) {
             String path = request.getServletPath();
             if ("/api/v1/auth/login".equals(path) || "/api/v1/auth/register".equals(path)) {
-                // Forwarded headers are not trusted; deployment must configure a trusted proxy explicitly.
-                decision = limiter.check("auth", hash(request.getRemoteAddr()), settings.authLimit());
+                decision = limiter.check("auth", hash(authClientAddress(request, settings.trustRenderEdgeIp())), settings.authLimit());
             } else if ("/api/v1/reservations".equals(path)) {
                 var authentication = SecurityContextHolder.getContext().getAuthentication();
                 decision = limiter.check("reservation", authentication.getName(), settings.reservationLimit());
@@ -52,6 +52,23 @@ public class RateLimitFilter extends OncePerRequestFilter {
         response.setHeader("Retry-After", Long.toString(decision.retryAfterSeconds()));
         response.getWriter().write("{\"type\":\"about:blank\",\"title\":\"" + title
                 + "\",\"status\":" + status + ",\"detail\":\"" + detail + "\"}");
+    }
+
+    static String authClientAddress(HttpServletRequest request, boolean trustRenderEdgeIp) {
+        if (trustRenderEdgeIp) {
+            var values = request.getHeaders("CF-Connecting-IP");
+            if (values.hasMoreElements()) {
+                String value = values.nextElement().trim();
+                if (!values.hasMoreElements() && value.matches("[0-9a-fA-F:.]{1,45}")) {
+                    try {
+                        return InetAddress.ofLiteral(value).getHostAddress();
+                    } catch (IllegalArgumentException ignored) {
+                        // Missing or malformed edge metadata shares the socket peer's quota.
+                    }
+                }
+            }
+        }
+        return request.getRemoteAddr();
     }
 
     private static String hash(String identity) {

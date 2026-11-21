@@ -133,8 +133,15 @@ class CatalogIntegrationTests {
                 assertThat(passwords.matches(PASSWORD, rows.getString(1))).isTrue();
             }
         }
-        assertThat(write("POST", "/api/v1/auth/register",
-                "{\"email\":\"CUSTOMER@example.test\",\"password\":\"" + PASSWORD + "\"}").statusCode()).isEqualTo(409);
+        var duplicate = write("POST", "/api/v1/auth/register",
+                "{\"email\":\"CUSTOMER@example.test\",\"password\":\"different-test-password\"}");
+        assertThat(duplicate.statusCode()).isEqualTo(registered.statusCode());
+        String registeredId = JsonPath.read(registered.body(), "$.id");
+        String duplicateId = JsonPath.read(duplicate.body(), "$.id");
+        assertThat(UUID.fromString(duplicateId)).isNotEqualTo(UUID.fromString(registeredId));
+        assertThat(duplicate.body().replace(duplicateId, registeredId)).isEqualTo(registered.body());
+        assertThat(write("POST", "/api/v1/auth/login",
+                "{\"email\":\"customer@example.test\",\"password\":\"different-test-password\"}").statusCode()).isEqualTo(401);
         var login = write("POST", "/api/v1/auth/login",
                 "{\"email\":\"CUSTOMER@example.test\",\"password\":\"" + PASSWORD + "\"}");
         assertThat(login.statusCode()).isEqualTo(200);
@@ -145,6 +152,23 @@ class CatalogIntegrationTests {
         assertThat(forbidden.statusCode()).isEqualTo(403);
         assertThat(forbidden.headers().firstValue("content-type").orElse("")).contains("application/problem+json");
         assertThat(request("PATCH", "/api/v1/admin/products/" + ACTIVE, "{}", customerToken).statusCode()).isEqualTo(403);
+    }
+
+    @Test
+    void registrationForAnExistingAdminKeepsItsIdentityAndRolePrivate() throws Exception {
+        var response = write("POST", "/api/v1/auth/register",
+                "{\"email\":\"ADMIN@example.test\",\"password\":\"different-test-password\"}");
+        assertThat(response.statusCode()).isEqualTo(201);
+        assertThat((String) JsonPath.read(response.body(), "$.role")).isEqualTo("CUSTOMER");
+        try (var connection = TestDatabase.connection(); var sql = connection.createStatement()) {
+            connection.setSchema(SCHEMA);
+            try (var rows = sql.executeQuery("SELECT id, role FROM users WHERE email='admin@example.test'")) {
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getString("role")).isEqualTo("ADMIN");
+                assertThat(rows.getString("id")).isNotEqualTo((String) JsonPath.read(response.body(), "$.id"));
+                assertThat(rows.next()).isFalse();
+            }
+        }
     }
 
     @Test

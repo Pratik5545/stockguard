@@ -1,9 +1,9 @@
-import { createApi, createOperations, tokenClaims } from './api.js';
+import { createApi, createOperations, isInventory, isOrder, isProduct, isReservation, tokenClaims } from './api.js';
 
 const $ = selector => document.querySelector(selector);
-const state = { token: null, role: null, expires: 0, generation: 0, offset: 0,
-  view: 'catalog', pages: { catalog: 0, reservations: 0, orders: 0 }, loading: new Set(), register: false };
-const api = createApi(() => state.token, () => logout('Your session ended. Please sign in again.'), date => { state.offset = date - Date.now(); });
+const state = { session: null, offset: 0,
+  view: 'catalog', pages: { catalog: 0, reservations: 0, orders: 0 }, loading: new Map(), register: false };
+const api = createApi(() => state.session, () => logout('Your session ended. Please sign in again.'), date => { state.offset = date - Date.now(); });
 const operations = createOperations(api);
 const now = () => Date.now() + state.offset;
 const amount = value => Number(value).toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
@@ -22,19 +22,25 @@ function button(text, action, className) {
 function notice(message, error = false) {
   const node = $('#notice'); node.replaceChildren(document.createTextNode(message));
   node.className = error ? 'error' : ''; node.hidden = false;
-  if (operations.pending) node.append(' ', button('Retry previous action', () => mutate(operations.pending.path, operations.pending.body)));
+  const pending = operations.pending;
+  if (pending) node.append(' ', button('Retry previous action', () => {
+    if (operations.pending === pending) mutate(pending.path, pending.body);
+  }));
 }
 function empty(container, message) { container.replaceChildren(element('p', message, 'empty-state')); }
 function sessionUi() {
-  document.querySelectorAll('[data-customer]').forEach(node => { node.hidden = state.role !== 'CUSTOMER'; });
-  document.querySelectorAll('[data-admin]').forEach(node => { node.hidden = state.role !== 'ADMIN'; });
-  $('#auth-open').hidden = Boolean(state.token); $('#logout').hidden = !state.token;
-  $('#identity').textContent = state.role ? `${state.role === 'ADMIN' ? 'Admin' : 'Customer'} session` : 'Guest';
+  const role = state.session?.role;
+  document.querySelectorAll('[data-customer]').forEach(node => { node.hidden = role !== 'CUSTOMER'; });
+  document.querySelectorAll('[data-admin]').forEach(node => { node.hidden = role !== 'ADMIN'; });
+  $('#auth-open').hidden = Boolean(state.session); $('#logout').hidden = !state.session;
+  $('#identity').textContent = role ? `${role === 'ADMIN' ? 'Admin' : 'Customer'} session` : 'Guest';
 }
 function logout(message = 'You have signed out.') {
-  state.token = null; state.role = null; state.expires = 0; state.generation++;
+  state.session = null; state.loading.clear();
   operations.clear(); state.pages.reservations = 0; state.pages.orders = 0;
-  $('#holds').replaceChildren(); $('#order-list').replaceChildren();
+  for (const node of document.querySelectorAll('#holds, #order-list, #reservations-pages, #orders-pages')) {
+    node.replaceChildren(); node.removeAttribute('aria-busy');
+  }
   $('#product-form').reset(); $('#stock-form').reset(); $('#stock-result').textContent = '';
   sessionUi(); location.hash = 'catalog'; route(); notice(message);
 }
@@ -42,7 +48,7 @@ function route() {
   if (location.hash === '#main') { $('#main').focus(); return; }
   let view = location.hash.slice(1) || 'catalog';
   if (!['catalog', 'reservations', 'orders', 'admin'].includes(view)) view = 'catalog';
-  if ((['reservations', 'orders'].includes(view) && state.role !== 'CUSTOMER') || (view === 'admin' && state.role !== 'ADMIN')) {
+  if ((['reservations', 'orders'].includes(view) && state.session?.role !== 'CUSTOMER') || (view === 'admin' && state.session?.role !== 'ADMIN')) {
     view = 'catalog'; notice('Sign in with the appropriate account to open that workspace.');
   }
   state.view = view;
@@ -59,42 +65,56 @@ function route() {
   heading.focus({ preventScroll: true });
 }
 function pagination(view, data) {
-  const node = $(`#${view}-pages`); node.replaceChildren();
-  if (data.totalPages <= 1) return;
-  const move = delta => { state.pages[view] += delta; load(view); };
-  const previous = button('Previous', () => move(-1)); previous.disabled = data.page === 0;
-  const next = button('Next', () => move(1)); next.disabled = data.page + 1 >= data.totalPages;
-  node.append(previous, element('span', `Page ${data.page + 1} of ${data.totalPages}`), next);
+  const node = $(`#${view}-pages`);
+  if (data.totalPages <= 1) { node.replaceChildren(); return; }
+  if (!node.childElementCount) {
+    const move = delta => {
+      const page = Number(node.dataset.page) + delta;
+      if (state.pages[view] === page) return;
+      state.pages[view] = page;
+      load(view);
+    };
+    node.append(button('Previous', () => move(-1)), element('span'), button('Next', () => move(1)));
+  }
+  node.dataset.page = data.page;
+  const [previous, label, next] = node.children;
+  previous.disabled = data.page === 0;
+  next.disabled = data.page + 1 >= data.totalPages;
+  label.textContent = `Page ${data.page + 1} of ${data.totalPages}`;
 }
 async function load(view = state.view, quiet = false) {
-  const loadKey = `${view}:${state.generation}`;
-  if (view === 'admin' || state.loading.has(loadKey)) return;
-  if (view !== 'catalog' && state.role !== 'CUSTOMER') return;
-  const generation = state.generation;
+  if (view === 'admin' || (quiet && state.loading.has(view))) return;
+  if (view !== 'catalog' && state.session?.role !== 'CUSTOMER') return;
+  const request = { page: state.pages[view], session: state.session };
+  const current = () => state.loading.get(view) === request && state.session === request.session;
   const container = $(view === 'catalog' ? '#products' : view === 'reservations' ? '#holds' : '#order-list');
-  state.loading.add(loadKey); container.setAttribute('aria-busy', 'true');
+  const validItem = view === 'catalog' ? isProduct : view === 'reservations' ? isReservation : isOrder;
+  state.loading.set(view, request); container.setAttribute('aria-busy', 'true');
   if (!quiet) empty(container, 'Loading… The demo server may take a moment to wake up.');
   try {
-    const data = await api(`${view === 'catalog' ? '/products' : `/me/${view}`}?page=${state.pages[view]}&size=12`, { authenticated: view !== 'catalog' });
-    if (generation !== state.generation) return;
-    if (data.items.length === 0 && data.page > 0) { state.pages[view] = 0; state.loading.delete(loadKey); return load(view); }
+    const data = await api(`${view === 'catalog' ? '/products' : `/me/${view}`}?page=${request.page}&size=12`, {
+      authenticated: view !== 'catalog',
+      validate: data => data.page === request.page && Array.isArray(data.items) && data.items.every(validItem) &&
+        Number.isInteger(data.totalPages) && Number.isInteger(data.totalElements)
+    });
+    if (!current()) return;
+    if (data.items.length === 0 && data.page > 0) { state.pages[view] = 0; return load(view); }
     // Preserve quantity input and focus during background catalog updates.
     if (quiet && view === 'catalog' && container.children.length === data.items.length && data.items.every((p, i) => container.children[i].dataset.id === p.id)) {
       data.items.forEach((product, i) => updateProduct(container.children[i], product));
-    } else {
-      container.replaceChildren(...data.items.map(view === 'catalog' ? productCard : item => recordCard(item, view)));
-    }
+    } else if (view === 'catalog') container.replaceChildren(...data.items.map(productCard));
+    else renderRecords(container, data.items, view);
     if (!data.items.length) empty(container, view === 'catalog' ? 'No products yet. Check back soon.' : view === 'reservations' ? 'No holds yet. Reserve a product from the catalog to get started.' : 'No orders yet. Confirm a hold to place your first order.');
     pagination(view, data);
     if (view === 'catalog') $('#catalog-status').textContent = `${data.totalElements} ${data.totalElements === 1 ? 'product' : 'products'} · Updated ${new Date().toLocaleTimeString()}`;
     tick();
   } catch (error) {
-    if (generation !== state.generation) return;
+    if (!current()) return;
     if (!quiet) { empty(container, error.message); container.append(button('Try again', () => load(view))); }
     else if (view === 'catalog') $('#catalog-status').textContent = 'Stock refresh failed. Displayed availability may be outdated.';
     else notice(`Could not refresh ${view}. ${error.message}`, true);
   } finally {
-    state.loading.delete(loadKey); container.removeAttribute('aria-busy');
+    if (current()) { state.loading.delete(view); container.removeAttribute('aria-busy'); }
   }
 }
 function updateProduct(card, product) {
@@ -110,7 +130,7 @@ function productCard(product) {
   const card = element('article', undefined, 'product'); card.dataset.id = product.id;
   const top = element('div', undefined, 'product-top'); top.append(element('span', product.sku, 'sku'), element('span', '', 'badge'));
   card.append(top, element('h3'), element('p', '', 'description'), element('div', '', 'price'), element('p', 'Unit price · INR', 'muted'));
-  if (state.role === 'CUSTOMER') {
+  if (state.session?.role === 'CUSTOMER') {
     const form = element('form', undefined, 'reserve-form');
     const label = element('label', 'Quantity'); const input = element('input');
     input.type = 'number'; input.min = '1'; input.max = '2'; input.step = '1'; input.value = '1'; input.required = true;
@@ -119,13 +139,15 @@ function productCard(product) {
       try { await mutate('/reservations', { productId: product.id, quantity: Number(input.value) }); }
       finally { submit.disabled = false; }
     }); card.append(form);
-  } else if (state.role === 'ADMIN') {
+  } else if (state.session?.role === 'ADMIN') {
     card.append(button('Adjust stock', () => { $('#stock-form').elements.productId.value = product.id; location.hash = 'admin'; $('#stock-form').elements.delta.focus(); }));
   } else card.append(button('Sign in to reserve', openAuth, 'primary'));
   updateProduct(card, product); return card;
 }
 function recordCard(item, view) {
   const card = element('article', undefined, 'record');
+  card.dataset.id = item.id;
+  card.dataset.status = item.status;
   const top = element('div', undefined, 'record-top'); top.append(element('h3', item.productName), element('span', item.status, 'badge'));
   card.append(top, element('p', `${item.quantity} × ${amount(item.unitPrice)} · ${item.sku}`), element('p', `ID: ${item.id}`, 'muted'), element('p', `Created ${dateText(item.createdAt)}`, 'muted'));
   if (view === 'orders') card.append(element('p', `Order total: ${amount(item.totalAmount)}`));
@@ -137,6 +159,26 @@ function recordCard(item, view) {
   }
   return card;
 }
+
+function renderRecords(container, items, view) {
+  const oldRows = new Map(Array.from(container.children, row => [row.dataset.id, row]));
+  const focused = document.activeElement;
+  const focusedId = container.contains(focused) ? focused.closest('.record')?.dataset.id : null;
+  const rows = items.map(item => {
+    const row = oldRows.get(item.id);
+    return row && row.dataset.status === item.status ? row : recordCard(item, view);
+  });
+  rows.forEach((row, index) => {
+    const position = container.children[index];
+    if (position !== row) container.insertBefore(row, position || null);
+  });
+  while (container.childElementCount > rows.length) container.lastElementChild.remove();
+  if (focusedId && state.view === view && document.activeElement !== focused) {
+    const heading = rows.find(row => row.dataset.id === focusedId)?.querySelector('h3') || $(`#${view} h1`);
+    heading.tabIndex = -1;
+    (focused.isConnected && !focused.disabled ? focused : heading).focus({ preventScroll: true });
+  }
+}
 async function lifecycle(event, id, action) {
   if (action === 'cancel' && !window.confirm('Cancel this hold and release its stock?')) return;
   const buttons = event.currentTarget.parentElement.querySelectorAll('button'); buttons.forEach(node => { node.disabled = true; });
@@ -144,18 +186,18 @@ async function lifecycle(event, id, action) {
   finally { buttons.forEach(node => { node.disabled = false; }); tick(); }
 }
 async function mutate(path, body) {
-  const generation = state.generation;
+  const session = state.session;
   try {
     await operations.run(path, body);
-    if (generation !== state.generation) return;
+    if (session !== state.session) return;
     notice(path.endsWith('/confirm') ? 'Order placed. You can find it in Orders.' : path.endsWith('/cancel') ? 'Hold cancelled. Stock has been released.' : 'Stock reserved. Confirm your hold before the deadline.');
     state.pages.reservations = 0;
-    if (path === '/reservations') { location.hash = 'reservations'; }
-    await load(state.view);
-  } catch (error) { if (generation === state.generation) notice(error.message, true); }
+    if (path === '/reservations' && state.view !== 'reservations') location.hash = 'reservations';
+    else await load(state.view);
+  } catch (error) { if (session === state.session) notice(error.message, true); }
 }
 function tick() {
-  if (state.token && now() >= state.expires) { logout('Your session expired. Sign in again to manage your holds.'); return; }
+  if (state.session && now() >= state.session.expires) { logout('Your session expired. Sign in again to manage your holds.'); return; }
   document.querySelectorAll('[data-expires]').forEach(node => {
     const seconds = Math.max(0, Math.ceil((Date.parse(node.dataset.expires) - now()) / 1000));
     node.textContent = seconds ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} remaining` : 'Deadline passed · awaiting server release';
@@ -177,13 +219,18 @@ $('#auth-form').addEventListener('submit', async event => {
   submit.disabled = true; $('#auth-toggle').disabled = true; $('#auth-error').textContent = '';
   const register = state.register;
   try {
-    const response = await api(`/auth/${register ? 'register' : 'login'}`, { method: 'POST', body: { email: form.elements.email.value.trim(), password: form.elements.password.value } });
-    if (register) { state.register = false; authMode(); $('#auth-description').textContent = 'Account created. Sign in with your password.'; }
+    const response = await api(`/auth/${register ? 'register' : 'login'}`, {
+      method: 'POST', body: { email: form.elements.email.value.trim(), password: form.elements.password.value },
+      validate: data => register ? typeof data.id === 'string' && data.role === 'CUSTOMER' && typeof data.email === 'string'
+        : typeof data.accessToken === 'string' && Number.isFinite(data.expiresIn) && data.expiresIn > 0
+    });
+    if (register) { state.register = false; authMode(); $('#auth-description').textContent = 'Registration received. Sign in with your password.'; }
     else {
       // Claims control presentation only. The backend verifies signatures and permissions.
       const claims = tokenClaims(response.accessToken);
-      state.token = response.accessToken; state.role = claims.role;
-      state.expires = Math.min(claims.exp * 1000, now() + response.expiresIn * 1000); state.generation++;
+      if (!['ADMIN', 'CUSTOMER'].includes(claims.role) || !Number.isFinite(claims.exp)) throw new Error('Invalid sign-in response.');
+      state.session = { token: response.accessToken, role: claims.role,
+        expires: Math.min(claims.exp * 1000, now() + response.expiresIn * 1000) };
       sessionUi(); $('#auth-dialog').close(); notice('Signed in. Your session stays in this tab only.'); route();
     }
   } catch (error) { $('#auth-error').textContent = error.message; }
@@ -191,21 +238,26 @@ $('#auth-form').addEventListener('submit', async event => {
 });
 async function adminSubmit(event, type) {
   event.preventDefault(); const form = event.currentTarget; const submit = form.querySelector('button');
-  const generation = state.generation; submit.disabled = true;
+  const session = state.session; submit.disabled = true;
   const fields = Object.fromEntries(new FormData(form));
   if (type === 'stock' && Number(fields.delta) < 0 && !window.confirm(`Remove ${Math.abs(Number(fields.delta))} units from physical stock?`)) {
     submit.disabled = false; return;
   }
   const path = type === 'product' ? '/admin/products' : `/admin/products/${encodeURIComponent(fields.productId.trim())}/stock-adjustments`;
   const body = type === 'product' ? { ...fields, price: fields.price, initialStock: Number(fields.initialStock) } : { delta: Number(fields.delta) };
+  if (type === 'stock') $('#stock-result').textContent = '';
   try {
-    const result = await api(path, { method: 'POST', body, authenticated: true });
-    if (generation !== state.generation) return;
+    const result = await api(path, {
+      method: 'POST', body, authenticated: true,
+      validate: data => type === 'product' ? isProduct(data) && data.sku === fields.sku
+        : isInventory(data) && data.productId === fields.productId.trim().toLowerCase()
+    });
+    if (session !== state.session) return;
     notice(type === 'product' ? `Product created: ${result.name}.` : 'Stock adjustment saved.');
     if (type === 'product') { form.reset(); $('#stock-form').elements.productId.value = result.id; }
     else { $('#stock-result').textContent = `On hand: ${result.onHandQuantity} · Reserved: ${result.reservedQuantity} · Available: ${result.availableQuantity}`; form.elements.delta.value = ''; }
   } catch (error) {
-    if (generation === state.generation) notice(error.status === 0 || error.status >= 500 ? 'The result is uncertain. Check the catalog or API before resubmitting; admin writes cannot be safely retried automatically.' : error.message, true);
+    if (session === state.session) notice(error.status === 0 || error.status === 408 || error.status >= 500 ? 'The result is uncertain. Check current stock or product details before submitting again.' : error.message, true);
   } finally { submit.disabled = false; }
 }
 $('#product-form').addEventListener('submit', event => adminSubmit(event, 'product'));

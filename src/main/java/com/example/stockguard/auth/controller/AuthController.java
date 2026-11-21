@@ -16,7 +16,7 @@ public class AuthController {
     public AuthController(AuthService auth) { this.auth = auth; }
 
     @PostMapping("/register")
-    @ApiResponse(responseCode = "201", description = "Customer registered")
+    @ApiResponse(responseCode = "201", description = "Registration received. Sign in to access the account.")
     public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).body(auth.register(request));
     }

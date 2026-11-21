@@ -21,7 +21,7 @@ Availability is never cached. It may change immediately after any read, and the 
 
 | Endpoint | Identity | Default quota |
 |---|---|---|
-| POST login and register | Shared quota per socket IP, hashed before Redis storage | 20 admitted attempts / 60 seconds |
+| POST login and register | Shared quota per client IP (socket peer by default, Render edge address on the Free Blueprint), hashed before Redis storage | 20 admitted attempts / 60 seconds |
 | POST reservation creation | Authenticated CUSTOMER UUID | 10 admitted attempts / 60 seconds |
 
 `redis/rate-limit.lua` performs the check, increment and initial TTL atomically. A fixed window begins with the first admitted request. Rejections do not extend the window or increment beyond the limit. Independent app instances share the counter when they share Redis and the namespace. Fixed windows can admit a burst across a window boundary; this is not a fairness or bot-prevention guarantee.
@@ -30,7 +30,9 @@ The filter runs after Spring Security authorization: unauthenticated or wrong-ro
 
 Exhausted quota returns RFC 9457 JSON with HTTP 429 and `Retry-After` in whole seconds. Clients must wait before retrying. Admitted reservation retries still use durable PostgreSQL idempotency; HTTP protection can return 429/503 before a replay. Those rejections do not create reservations or idempotency records and do not consume a new idempotency key.
 
-The server ignores forwarded headers and uses the socket IP. Spoofing `X-Forwarded-For` does not change the quota identity. A real proxy deployment must explicitly configure trusted forwarding; otherwise clients behind that proxy share one auth quota. NAT users also share their public IP quota. Raw IPs and tokens are not stored in the keys; the IP hash is pseudonymous, not anonymous.
+Local and direct deployments use the socket IP. The Render Free Blueprint sets `TRUST_RENDER_EDGE_IP=true` for its public web service. In that mode the auth limiter accepts one literal address from `CF-Connecting-IP`, canonicalizes IPv4/IPv6 and falls back to the peer for a missing, invalid or repeated header. Clients sharing a public IP share a quota. Redis stores a pseudonymous hash of the address.
+
+This setting relies on Render's public ingress overwriting that header and the Free web service accepting traffic only through that ingress. Keep the setting disabled on an origin that untrusted callers can reach directly or through a private network. The limiter never selects an address from `X-Forwarded-For`. [Render client IP guidance](https://render.com/articles/host-pocketbase-on-render) and [Free web service networking](https://render.com/docs/free).
 
 ## Redis failure policy
 

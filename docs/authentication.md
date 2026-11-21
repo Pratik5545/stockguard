@@ -4,7 +4,7 @@ The same-origin [frontend](frontend.md) keeps access tokens only in memory and c
 
 ## Contract
 
-- `POST /api/v1/auth/register`: email and password; returns 201 with id/email/role. All registrations are CUSTOMER. Duplicate normalized email returns 409.
+- `POST /api/v1/auth/register` accepts an email and password. A valid new or duplicate registration returns `201` with a fresh UUID, the normalized email and the role `CUSTOMER`. For a new account that UUID becomes its account ID. For an existing email the UUID identifies only the signup attempt. The existing ID, role and password stay private. Clients should proceed to sign-in after either response.
 - `POST /api/v1/auth/login`: email and password; returns accessToken, tokenType (Bearer), expiresIn (900 seconds). Incorrect credentials return the same 401 message for unknown email and wrong password.
 - Email is lowercased; passwords are not trimmed. Registration passwords must be 12-128 characters. Passwords use salted PBKDF2-HMAC-SHA256 (310,000 iterations); neither passwords nor hashes appear in response DTOs.
 - Send `Authorization: Bearer <accessToken>` for protected requests. Missing/invalid tokens return 401; CUSTOMER access to `/api/v1/admin/**` returns 403.

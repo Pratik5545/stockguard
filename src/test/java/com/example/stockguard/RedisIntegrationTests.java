@@ -55,6 +55,7 @@ class RedisIntegrationTests {
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", TestDatabase::url);
+        registry.add("stockguard.redis.trust-render-edge-ip", () -> "true");
         registry.add("spring.datasource.username", TestDatabase::username);
         registry.add("spring.datasource.password", TestDatabase::password);
         registry.add("spring.datasource.hikari.schema", () -> SCHEMA);
@@ -184,6 +185,21 @@ class RedisIntegrationTests {
     }
 
     @Test
+    void clientsBehindTheRenderEdgeHaveSeparateAuthQuotas() throws Exception {
+        String login = "{\"email\":\"missing@example.test\",\"password\":\"Test-password-12345\"}";
+        var builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/auth/login"))
+                .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(login));
+        var first = builder.setHeader("CF-Connecting-IP", "2001:db8::1").build();
+        for (int i = 0; i < 3; i++) {
+            assertThat(client.send(first, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(401);
+        }
+        var sameAddress = builder.setHeader("CF-Connecting-IP", "2001:0db8:0:0:0:0:0:1").build();
+        assertProblem(client.send(sameAddress, HttpResponse.BodyHandlers.ofString()), 429);
+        var other = builder.setHeader("CF-Connecting-IP", "192.0.2.12").build();
+        assertThat(client.send(other, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(401);
+    }
+
+    @Test
     void reservationLimitIsPerUserAndDoesNotBlockConfirmOrCancel() throws Exception {
         var first = reserve(ownerToken, "one");
         var second = reserve(ownerToken, "two");
@@ -236,7 +252,7 @@ class RedisIntegrationTests {
 
     @Test
     void quotaExpiresWithoutExtendingTheWindowOnRejection() {
-        var shortWindow = new RedisFeaturesProperties(true, Duration.ofSeconds(60), Duration.ofSeconds(1), 1, 1, NAMESPACE);
+        var shortWindow = new RedisFeaturesProperties(true, false, Duration.ofSeconds(60), Duration.ofSeconds(1), 1, 1, NAMESPACE);
         var shortLimiter = new RedisRateLimiter(redis, shortWindow, meters);
         String key = NAMESPACE + ":rate:expiry:user";
         assertThat(shortLimiter.check("expiry", "user", 1).retryAfterSeconds()).isZero();

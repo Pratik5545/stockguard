@@ -10,7 +10,7 @@ The responsive application is served at `/` by Spring Boot, using same-origin `/
 - `assets/api.js`: HTTP errors, bearer headers, and reservation retry identity.
 - `scripts/frontend-tests.mjs`: dependency-free Node request/retry tests.
 
-Catalog and customer history refresh every 15 seconds while the tab is visible. Background catalog updates preserve quantity input. Availability is informational; PostgreSQL decides whether reservations succeed. The countdown uses the response Date header to reduce client-clock differences. At the deadline, actions disable while the worker releases stock. Defaults shown are five-minute holds and maximum quantity two; update the UI if deployment limits change.
+Catalog and customer history refresh every 15 seconds while the tab is visible. Selecting a page supersedes an older request for that view. Background updates preserve quantity inputs on unchanged catalog rows and keyboard focus on available hold actions. If a focused hold action disappears during a refresh, focus moves to its record heading or the view heading. PostgreSQL decides whether a reservation succeeds. The countdown uses the response Date header to reduce client-clock differences. At the deadline, actions disable while the worker releases stock. Defaults shown are five-minute holds and maximum quantity two; update the UI if deployment limits change.
 
 All lists are paginated. Customers create single-product holds, confirm/cancel and view orders. Admins create products and adjust stock using a catalog selection or product UUID. Admins have no reservation controls. Prices use INR, as explicitly specified by the V1 database migration.
 
@@ -26,7 +26,9 @@ Inline validation preserves input, negative stock removal and cancellation reque
 
 JWTs stay in JavaScript memory: no localStorage, sessionStorage, cookies, URL parameters, or logging. Refresh, closure, sign-out and expiry end the frontend session. Logout discards the token locally; the backend has no revocation endpoint. Decoded roles control presentation only; Spring Security enforces permissions. Public requests omit bearer tokens. Password inputs clear after submission/dialog closure. Registration is followed by a separate sign-in.
 
-Each new create/confirm/cancel action gets a fresh UUID Idempotency-Key. Network/server errors preserve the action and key in memory. The explicit Retry button resends the exact request; other reservation mutations are blocked until it resolves. Success and definite 4xx responses clear the action. Refresh/sign-out loses retry state: inspect history before creating another hold. Admin writes are never automatically retried; check catalog/API after uncertain results before resubmitting.
+Each new create/confirm/cancel action gets a fresh UUID Idempotency-Key. A network error, server timeout, 5xx or incomplete success response leaves the original key and request available through **Retry previous action**. A first-attempt 429 releases the action. A 429 while retrying an uncertain action keeps the key because the limiter runs before the database replay check. A verified success or a definitive business rejection releases the action. Refresh and sign-out clear its in-memory state. Inspect your holds before starting over in a new session.
+
+An authenticated 401 ends only the session that sent the request. Admin writes with an unreadable or incomplete response show an uncertain result and keep the form values. Check the current product or stock before resubmitting an admin write.
 
 Static resources have an explicit public GET allowlist; API role rules remain unchanged. A restrictive page CSP allows only same-origin assets/connections. No third-party scripts or analytics are loaded.
 
@@ -40,8 +42,12 @@ node --test scripts/frontend-tests.mjs
 ./mvnw.cmd --batch-mode --no-transfer-progress verify
 ```
 
-Use JDK 25 and unpause Docker Desktop for the full suite. Verified November 22, 2026: five Node tests and two database-free Spring HTTP tests passed; Maven packaged the application. The installed Maven 3.10.0 was used because the local wrapper launcher failed. Full PostgreSQL/Redis suite was not rerun because Docker Desktop was paused.
+Use JDK 25 and running Docker Desktop for the backend suite. On November 22, 2026, Maven ran 57 tests with disposable PostgreSQL 18 and Redis 8.2. All passed with zero skips. Nine Node tests passed. Maven packaged the updated JAR.
 
 Browser checks now use temporary Playwright installed only under ignored `target/ui-qa/` and the installed Chrome. `node scripts/frontend-browser-tests.cjs` verifies responsive overflow at 320/390/768/1280px, registration, reserve/confirm/cancel/orders, expired action disabling, admin creation/positive adjustments, error recovery and Escape. Requests are intercepted with clearly labelled test fixtures; this does not prove live backend integration. Screenshots are written under ignored target/ and desktop/mobile results were inspected. No fixture records or tokens are sent to the live API.
 
-Remaining acceptance: full Testcontainers suite after Docker is unpaused, real backend browser walkthrough, pagination with multiple pages, negative-adjustment rejection, invalid login/session expiry and offline retry interaction. The request-layer retry/401/429 tests cover those transport behaviors separately. Browser tests are optional local QA and are not added to production dependencies or CI.
+The fixture browser suite also delays a catalog refresh while navigating to another page, inserts a hold beside a focused action, and checks recovery from an incomplete admin response.
+
+A separate local Chrome run used the packaged JAR with disposable PostgreSQL and Redis. It exercised new and duplicate signup, invalid and valid login, product creation, a stock increase and a rejected decrease. The browser discarded one committed reservation response. Its first retry hit the real Redis limit, then its next retry received the saved result. After confirmation PostgreSQL held one reservation and one order. The JAR ran with `-Duser.timezone=UTC`, as in the Dockerfile.
+
+Remaining browser checks include elapsed session expiry, manual offline/online interaction and the deployed Render ingress. The local browser tooling is optional.

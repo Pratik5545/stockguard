@@ -10,11 +10,6 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         Throwable cause = exception;
         while (cause != null) {
             if (cause instanceof org.hibernate.exception.ConstraintViolationException constraint
-                    && "uq_users_email".equals(constraint.getConstraintName())) {
-                return org.springframework.http.ProblemDetail.forStatusAndDetail(
-                        org.springframework.http.HttpStatus.CONFLICT, "An account with this email already exists.");
-            }
-            if (cause instanceof org.hibernate.exception.ConstraintViolationException constraint
                     && "uq_products_sku".equals(constraint.getConstraintName())) {
                 return org.springframework.http.ProblemDetail.forStatusAndDetail(
                         org.springframework.http.HttpStatus.CONFLICT, "A product with this SKU already exists.");

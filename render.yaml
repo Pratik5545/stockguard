@@ -26,6 +26,8 @@ services:
         value: "4"
       - key: SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE
         value: "0"
+      - key: TRUST_RENDER_EDGE_IP
+        value: "true"
       - key: REDIS_ENABLED
         value: "true"
       - key: SPRING_DATA_REDIS_URL

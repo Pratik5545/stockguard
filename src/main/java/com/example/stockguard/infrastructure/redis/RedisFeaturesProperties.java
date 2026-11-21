@@ -7,7 +7,7 @@ import org.springframework.validation.annotation.Validated;
 
 @Validated
 @ConfigurationProperties("stockguard.redis")
-public record RedisFeaturesProperties(boolean enabled, Duration cacheTtl, Duration rateWindow,
+public record RedisFeaturesProperties(boolean enabled, boolean trustRenderEdgeIp, Duration cacheTtl, Duration rateWindow,
         @Min(1) @Max(10000) int authLimit, @Min(1) @Max(10000) int reservationLimit,
         @NotNull @Pattern(regexp = "[A-Za-z0-9:_-]{1,64}") String namespace) {
     public RedisFeaturesProperties {

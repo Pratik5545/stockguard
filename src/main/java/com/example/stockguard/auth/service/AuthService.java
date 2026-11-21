@@ -6,6 +6,7 @@ import com.example.stockguard.user.repository.UserRepository;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -34,8 +35,11 @@ public class AuthService {
 
     @Transactional
     public UserResponse register(RegisterRequest request) {
-        var user = users.saveAndFlush(new UserAccount(normalize(request.email()), passwords.encode(request.password())));
-        return new UserResponse(user.getId(), user.getEmail(), user.getRole());
+        String email = normalize(request.email());
+        UUID registrationId = UUID.randomUUID();
+        users.registerIfAbsent(registrationId, email, passwords.encode(request.password()));
+        // A duplicate receives this attempt's ID, never the existing account's ID or role.
+        return new UserResponse(registrationId, email, "CUSTOMER");
     }
 
     @Transactional(readOnly = true)

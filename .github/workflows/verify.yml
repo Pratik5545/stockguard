@@ -20,3 +20,5 @@ jobs:
           cache: maven
       - name: Verify all tests with Testcontainers PostgreSQL and Redis
         run: sh ./mvnw --batch-mode --no-transfer-progress verify
+      - name: Verify frontend request and retry behavior
+        run: node --test scripts/frontend-tests.mjs

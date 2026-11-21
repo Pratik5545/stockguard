@@ -4,7 +4,7 @@ StockGuard is a modular monolith with one PostgreSQL source of truth.
 
 ```mermaid
 flowchart TD
-    Client[Swagger UI or API client] --> Security[JWT verification and endpoint roles]
+    Client[Same-origin frontend, Swagger UI or API client] --> Security[JWT verification and endpoint roles]
     Security --> Controller[Controllers and request validation]
     Controller --> Service[Services and transaction boundaries]
     Service --> JPA[Catalog/user JPA repositories]

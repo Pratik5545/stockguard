@@ -33,6 +33,24 @@ class StockGuardApplicationTests {
     private int port;
 
     @Test
+    void frontendIsPublicButApiPermissionsRemainEnforced() throws Exception {
+        try (HttpClient client = HttpClient.newHttpClient()) {
+            for (String path : new String[]{"/", "/index.html", "/assets/styles.css", "/assets/app.js", "/assets/api.js"}) {
+                var response = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                        .GET().build(), HttpResponse.BodyHandlers.ofString());
+                assertThat(response.statusCode()).as(path).isEqualTo(200);
+                assertThat(response.body()).isNotBlank();
+                if (path.equals("/")) assertThat(response.body()).contains("StockGuard", "Content-Security-Policy");
+            }
+            for (String path : new String[]{"/api/v1/me/reservations", "/api/v1/me/orders", "/api/v1/admin/products"}) {
+                var response = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                        .GET().build(), HttpResponse.BodyHandlers.ofString());
+                assertThat(response.statusCode()).as(path).isEqualTo(401);
+            }
+        }
+    }
+
+    @Test
     void applicationStartsAndReportsHealthyOverHttp() throws Exception {
         try (HttpClient client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))

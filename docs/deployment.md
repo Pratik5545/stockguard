@@ -1,4 +1,6 @@
-ye # Free portfolio deployment
+# Free portfolio deployment
+
+The frontend is packaged with the API and served at `/`; no additional service or environment variable is needed. See [frontend behavior and checks](frontend.md). Frontend deployment remains a user action.
 
 The root `render.yaml` defines two Free Render services. The Blueprint passes Render's JSON Schema validation.
 

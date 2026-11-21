@@ -1,5 +1,7 @@
 # Reservation and order workflow
 
+The [browser frontend](frontend.md) at `/` supports this workflow directly, including fresh action keys and safe explicit retries after uncertain responses.
+
 ## Try it in Swagger UI
 
 1. Start the application with the README local-profile command; Flyway applies V3 automatically.

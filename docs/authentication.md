@@ -1,5 +1,7 @@
 # Authentication
 
+The same-origin [frontend](frontend.md) keeps access tokens only in memory and clears its session on refresh, sign-out or expiry. Browser logout does not revoke an already issued token.
+
 ## Contract
 
 - `POST /api/v1/auth/register`: email and password; returns 201 with id/email/role. All registrations are CUSTOMER. Duplicate normalized email returns 409.

@@ -1,0 +1,46 @@
+# Free portfolio demo; external PostgreSQL is supplied through Neon.
+services:
+  - type: web
+    name: stockguard-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: main
+    dockerfilePath: ./Dockerfile
+    autoDeployTrigger: checksPass
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SERVER_PORT
+        value: "10000"
+      - key: JAVA_TOOL_OPTIONS
+        value: "-XX:MaxRAMPercentage=50.0 -XX:ActiveProcessorCount=2"
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
+        value: "4"
+      - key: SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE
+        value: "0"
+      - key: REDIS_ENABLED
+        value: "true"
+      - key: SPRING_DATA_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: stockguard-cache
+          property: connectionString
+      - key: SPRING_DATA_REDIS_CONNECT_TIMEOUT
+        value: "2s"
+      - key: SPRING_DATA_REDIS_TIMEOUT
+        value: "2s"
+  - type: keyvalue
+    name: stockguard-cache
+    plan: free
+    region: frankfurt
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+    persistenceMode: "off"

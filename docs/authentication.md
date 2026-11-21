@@ -43,4 +43,4 @@ try { $rng.GetBytes($bytes); $env:JWT_SECRET = [Convert]::ToBase64String($bytes)
 - HS256 tokens are signed, not encrypted. They contain user ID, role, issuer, audience and timestamps, with no password/email. The API verifies signature, algorithm, issuer, audience, expiry and required claims. Clocks must be synchronized (zero configured clock skew).
 - No refresh tokens, logout/revocation, password reset or email verification yet. Role changes take effect in newly issued tokens; existing role claims remain valid until expiry. Rotating the signing key invalidates existing tokens.
 - Authentication is stateless and header-based; session/form/basic authentication are disabled. CSRF is disabled because this API does not authenticate through cookies. Use HTTPS when deployed.
-- Login/registration rate limiting is still pending in the Redis phase. Reservation/order ownership tests will be added when those endpoints exist.
+- When Redis is enabled, login and registration share an IP-based request limit; reservation creation has a per-customer limit. See [Redis behavior](redis.md).

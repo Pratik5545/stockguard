@@ -61,10 +61,6 @@ With Docker Desktop running:
 
 No manual test database setup is required. [Testcontainers](https://java.testcontainers.org/modules/databases/postgres/) starts a temporary PostgreSQL container with a random mapped port and generated test credentials; its resource reaper removes the container after the test JVM exits. Tests never use the Compose database by default. Docker being unavailable is a test failure, rather than silently skipping database coverage.
 
-Maven uses `JAVA_HOME`, which may differ from `java` on PATH. If Maven reports `release version 25 not supported`, select your installed JDK 25 for that terminal, for example on this machine:
-
-```powershell
-$env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-25.0.5.8-hotspot'
-```
+Maven uses `JAVA_HOME`, which may differ from `java` on PATH. If Maven reports `release version 25 not supported`, set `JAVA_HOME` to your installed JDK 25 directory in that terminal.
 
 For an externally managed dedicated test database, set `TEST_DB_URL`, `TEST_DB_USERNAME` and `TEST_DB_PASSWORD`. The role needs schema-creation permission; suites remove only their randomly generated schemas. Redis integration tests still require Docker and start a separate disposable Redis container. GitHub Actions uses the same Testcontainers path on its Ubuntu runner.

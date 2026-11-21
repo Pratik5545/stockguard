@@ -18,7 +18,14 @@
 /src/main/resources/application-local.yml
 /src/main/resources/application-local.yaml
 /config/application-local.properties
+/config/application-local.yml
+/config/application-local.yaml
 *.log
+
+# Private project planning and progress notes (kept at the project root)
+/README.md
+/PROJECT_STATE.md
+/STOCKGUARD_PROJECT_GUIDE.md
 
 # Operating system files
 .DS_Store
